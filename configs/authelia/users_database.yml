@@ -1,0 +1,7 @@
+users:
+  aurora:
+    displayname: "Administrador"
+    password: "$argon2id$v=19$m=65536,t=1,p=8$YmdTWlRIazZhOXkyWUhPUw$UKSETswJ4dYosHKHjasqdZWIyfDpPQpaLTZe/4VzXsk" 
+    email: aurora@email.com
+    groups:
+      - admins

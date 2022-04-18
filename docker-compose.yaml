@@ -1,0 +1,153 @@
+version: '3'
+
+volumes:
+  traefik-ssl-certs:
+    driver: local
+  portainer_data:
+  prometheus_data:
+  grafana_data:
+  authelia_data:
+  heimdall_data:
+
+services:
+  authelia:
+    image: authelia/authelia
+    volumes:
+      - ./configs/authelia:/config
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.authelia.rule=Host(`auth.aurora.drenapps.com.br`)'
+      - 'traefik.http.routers.authelia.entrypoints=web,websecure'
+      - 'traefik.http.routers.authelia.tls=true'
+      - "traefik.http.routers.authelia.tls.certresolver=production"
+      - 'traefik.http.middlewares.authelia.forwardauth.address=http://authelia:9091/api/verify?rd=https://auth.aurora.drenapps.com.br/`'
+      - 'traefik.http.middlewares.authelia.forwardauth.trustForwardHeader=true'
+      - "traefik.http.services.authelia.loadbalancer.server.port=9091"
+      - 'traefik.http.middlewares.authelia.forwardauth.authResponseHeaders=Remote-User,Remote-Groups,Remote-Name,Remote-Email'
+    expose:
+      - 9091
+    restart: unless-stopped
+    environment:
+      - TZ=America/Sao_Paulo
+    healthcheck:
+      disable: true
+
+  traefik:
+    image: "traefik:v2.5"
+    depends_on:
+      - authelia
+    container_name: "traefik"
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      # (Optional) Expose Dashboard
+      # - "8080:8080"  # Don't do this in production!
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.aurora.drenapps.com.br`)"
+      - "traefik.http.routers.traefik.entrypoints=web,websecure"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.tls.certresolver=production"
+      - "traefik.http.routers.traefik.middlewares=traefik-auth"
+    volumes:
+      - ~/configs/traefik:/etc/traefik
+      - traefik-ssl-certs:/ssl-certs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  portainer:
+    image: portainer/portainer-ce
+    command: -H unix:///var/run/docker.sock
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    labels:
+      # Frontend
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.entrypoints=web,websecure"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.aurora.drenapps.com.br`)"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+      - "traefik.http.routers.portainer.service=portainer"
+      - "traefik.http.routers.portainer.tls=true"
+      - "traefik.http.routers.portainer.tls.certresolver=production"
+      - "traefik.http.routers.portainer.middlewares=authelia@docker"
+      
+      # Edge
+      - "traefik.http.routers.portainer-edge.rule=Host(`edge.aurora.drenapps.com.br`)"
+      - "traefik.http.routers.portainer-edge.entrypoints=websecure"
+      - "traefik.http.services.portainer-edge.loadbalancer.server.port=8000"
+      - "traefik.http.routers.portainer-edge.service=portainer-edge"
+      - "traefik.http.routers.portainer-edge.tls=true"
+      - "traefik.http.routers.portainer-edge.tls.certresolver=production"
+      - "traefik.http.routers.portainer-edge.middlewares=authelia@docker"
+  
+  prometheus:
+    image: prom/prometheus
+    # ports:
+    #  - "9090:9090"
+    restart: always
+    volumes:
+      - prometheus_data:/prometheus
+      - ~/configs/prometheus/:/etc/prometheus/
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.aurora.drenapps.com.br`)"
+      - "traefik.http.routers.prometheus.service=prometheus"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+      - "traefik.http.routers.prometheus.tls=true"
+      - "traefik.http.routers.prometheus.entrypoints=web,websecure"
+      - "traefik.http.routers.prometheus.tls.certresolver=production"
+      - "traefik.http.routers.prometheus.middlewares=authelia@docker"
+
+  grafana:
+    image: grafana/grafana:8.4.3-arm64
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: always
+    environment:
+      - "GF_SMTP_ENABLED=true" 
+      - "GF_SMTP_HOST=<host-stmp>" 
+      - "GF_SMTP_USER=<usuario>" 
+      - "GF_SMTP_PASSWORD=<senha>"
+      - "GF_SMTP_FROM_ADDRESS=<email-de-disparo-do-smtp>"
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.aurora.drenapps.com.br`)"
+      - "traefik.http.routers.grafana.service=grafana"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+      - "traefik.http.routers.grafana.tls=true"
+      - "traefik.http.routers.grafana.entrypoints=web,websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=production"
+      - "traefik.http.routers.grafana.middlewares=authelia@docker"
+
+  heimdall:
+    image: lscr.io/linuxserver/heimdall
+    environment:
+      # para obter o valor executar no terminal: id -u ubuntu
+      - PUID=1001
+      # para obter o valor executar no terminal: id -G ubuntu
+      - PGID=1001
+      - TZ=America/Sao_Paulo
+    volumes:
+      - heimdall_data:/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.heimdall.rule=Host(`heimdall.aurora.drenapps.com.br`)"
+      - "traefik.http.routers.heimdall.service=heimdall"
+      - "traefik.http.services.heimdall.loadbalancer.server.port=80"
+      - "traefik.http.routers.heimdall.tls=true"
+      - "traefik.http.routers.heimdall.entrypoints=web,websecure"
+      - "traefik.http.routers.heimdall.tls.certresolver=production"
+      - "traefik.http.routers.heimdall.middlewares=authelia@docker"
+
+    restart: always

@@ -1,0 +1,43 @@
+version: '3.7'
+volumes:
+  postgres-prd:
+  postgres-stg:
+
+  redis-prd:
+
+services:
+  postgres-prd:
+    image: postgres:14
+    restart: always
+    environment:
+      - POSTGRES_USER=aurora
+      - POSTGRES_PASSWORD=!Aurora_123-prd
+    ports:
+      - '5432:5432'
+    volumes: 
+      - postgres-prd:/var/lib/postgresql/data
+
+  postgres-stg:
+    image: postgres:14
+    restart: always
+    environment:
+      - POSTGRES_USER=aurora
+      - POSTGRES_PASSWORD=!Aurora_123-stg
+    ports:
+      - '5433:5432'
+    volumes: 
+      - postgres-stg:/var/lib/postgresql/data
+
+  redis-prd:
+    image: redis
+    command: redis-server --requirepass !Aurora_123 --appendonly yes
+    hostname: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-prd:/data
+
+networks:
+  default:
+    external: true
+    name: server_default

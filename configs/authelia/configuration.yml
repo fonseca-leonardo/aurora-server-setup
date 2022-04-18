@@ -1,0 +1,85 @@
+---
+###############################################################
+#                   Authelia configuration                    #
+###############################################################
+
+server:
+  host: 0.0.0.0
+  port: 9091
+log:
+  level: debug
+theme: dark
+# This secret can also be set using the env variables AUTHELIA_JWT_SECRET_FILE
+jwt_secret: a_very_important_secret
+default_redirection_url: https://auth.aurora.drenapps.com.br
+totp:
+  issuer: authelia.com
+
+# duo_api:
+#  hostname: api-123456789.example.com
+#  integration_key: ABCDEF
+#  # This secret can also be set using the env variables AUTHELIA_DUO_API_SECRET_KEY_FILE
+#  secret_key: 1234567890abcdefghifjkl
+
+authentication_backend:
+  file:
+    path: /config/users_database.yml
+    password:
+      algorithm: argon2id
+      iterations: 1
+      salt_length: 16
+      parallelism: 8
+      memory: 64
+      
+access_control:
+  default_policy: deny
+  rules:
+    # Rules applied to everyone
+    - domain: grafana.aurora.drenapps.com.br
+      policy: two_factor
+    - domain: prometheus.aurora.drenapps.com.br
+      policy: two_factor
+    - domain: minio-console.aurora.drenapps.com.br
+      policy: two_factor
+    - domain: portainer.aurora.drenapps.com.br
+      policy: two_factor
+    - domain: heimdall.aurora.drenapps.com.br
+      policy: two_factor
+
+session:
+  name: authelia_session
+  # This secret can also be set using the env variables AUTHELIA_SESSION_SECRET_FILE
+  secret: unsecure_session_secret
+  expiration: 14400  # 1 hour
+  inactivity: 1200  # 5 minutes
+  domain: drenapps.com.br  # Should match whatever your root protected domain is
+
+  redis:
+    host: redis-prd
+    port: 6379
+    # This secret can also be set using the env variables AUTHELIA_SESSION_REDIS_PASSWORD_FILE
+    password: "!Aurora_123"
+
+regulation:
+  max_retries: 3
+  find_time: 120
+  ban_time: 300
+
+storage:
+  encryption_key: a_very_important_secret # Now required
+  postgres:
+    host: aurora.drenapps.com.br
+    port: 5432
+    database: authelia
+    schema: public
+    username: admin
+    password: "!Aurora_123-prd"
+
+notifier:
+  smtp:
+    username: <usuario-smtp>
+    # This secret can also be set using the env variables AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE
+    password: <senha-stmp>
+    host: <smtp-host>
+    port: 465
+    sender: <email-de-envio>
